@@ -13,10 +13,10 @@ import java.net.Socket
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * DEBUG-ONLY glasses BLE/SPP -> TCP redirection shim (add.219 / add.72 design).
+ * DEBUG-ONLY glasses BLE/SPP -> TCP redirection shim.
  *
  * The AVD has no usable app-level BLE and netsim exposes no connectable vendor GATT server
- * (add.72 / add.218), so the real app cannot receive glasses cmd-65 notifies over BLE on an
+ * so the real app cannot receive glasses cmd-65 notifies over BLE on an
  * emulator. This shim redirects the glasses control plane to the glasses simulator over a
  * loopback TCP socket (`adb reverse tcp:<port>` analogue), letting the real app on an AVD
  * receive cmd-65 notifies and exercise the real vendor parse path WITHOUT real hardware.
@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * `LocalBroadcastManager` Intent with action `com.swatchdevice.pro.characteristic_changed_qc`
  * and extras ADDRESS / CHARACTER_UUID / VALUE; replaying that same Intent drives BOTH the
  * vendor's internal `QCBluetoothCallbackBigDataCloneReceiver` (the real cmd-65 parser, now
- * patched) AND the app's own `MyBluetoothReceiver` (the add.218 app-seam guard). Outbound app
+ * patched) AND the app's own `MyBluetoothReceiver` (the app-seam guard). Outbound app
  * control writes are observed via the vendor's `characteristic_write_qc` broadcast and mirrored
  * to the sim, so the sim can drive request/response (e.g. reply to a glassesControl request).
  *
@@ -124,7 +124,7 @@ class GlassesSimBridge(
     companion object {
         private const val TAG = "GlassesSimBridge"
 
-        // Vendor broadcast contract (decompiled from glasses_sdk_20250723_v01.aar:
+        // Vendor SDK broadcast contract (glasses_sdk_20250723_v01.aar:
         // QCBluetoothCallbackCloneReceiver.onReceive / BleOperateManager.mySendBroadcast).
         const val ACTION_CHAR_CHANGED = "com.swatchdevice.pro.characteristic_changed_qc"
         const val ACTION_CHAR_WRITE = "com.swatchdevice.pro.characteristic_write_qc"
@@ -136,7 +136,7 @@ class GlassesSimBridge(
         // Oudmon glasses CTRL notify characteristic (Constants: de5bf729...).
         const val NOTIFY_UUID = "de5bf729-d711-4e47-af26-65e3012a5dc7"
 
-        // Synthetic HeyCyan sim identity (add.72 device table).
+        // Synthetic HeyCyan sim identity.
         const val DEFAULT_ADDRESS = "D4:9E:3F:00:02:01"
 
         private const val CONNECT_TIMEOUT_MS = 4000

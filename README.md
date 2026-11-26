@@ -177,7 +177,6 @@ The repository also contains Android emulator, hardware-in-the-loop, and iOS KMP
 | [`android/AGENTS.md`](android/AGENTS.md) | HeyCyan protocol and media-transfer notes |
 | [`android/CyanBridge/docs/local-models.md`](android/CyanBridge/docs/local-models.md) | LiteRT-LM and llama.cpp local inference |
 | [`android/CyanBridge/meta_rayban_mvp.md`](android/CyanBridge/meta_rayban_mvp.md) | Meta DAT implementation and integration notes |
-| [`BRIDGE_RESEARCH_NOTES.md`](BRIDGE_RESEARCH_NOTES.md) | Smart-glasses protocol research |
 | [`ios/`](ios/) | iOS app (KMP host, TestFlight beta) and vendor integration work |
 | [`examples/`](examples/) | Integration examples |
 | [`tools/`](tools/) | Development, testing, and hardware tooling |

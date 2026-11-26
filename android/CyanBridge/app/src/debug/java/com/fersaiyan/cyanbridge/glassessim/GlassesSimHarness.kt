@@ -10,16 +10,16 @@ import com.fersaiyan.cyanbridge.ui.wifi.p2p.WifiP2pManagerSingleton
 import java.net.InetAddress
 
 /**
- * DEBUG-ONLY media-sync lifecycle harness (add.221).
+ * DEBUG-ONLY media-sync lifecycle harness.
  *
- * add.219 wired the BLE->TCP notify bridge ([GlassesSimBridge]) and proved the (patched) vendor
- * cmd-65 parser runs live in ART on an AVD. What it left owed was a FULL UI-driven media sync per
+ * The BLE->TCP notify bridge ([GlassesSimBridge]) runs the (patched) vendor
+ * cmd-65 parser live in ART on an AVD. What it leaves owed is a FULL UI-driven media sync per
  * flow: the coordinator ([com.fersaiyan.cyanbridge.media.sync.GlassesMediaSyncCoordinator]) only
  * advances into the HTTP media download after TWO lifecycle events that an Android emulator CANNOT
  * physically produce:
  *
  *   1. A connected vendor BLE GATT link  (`BleOperateManager.isConnected`, backed by
- *      `BleBaseControl.mIsConnected`). netsim exposes no connectable vendor GATT (add.72 / add.218),
+ *      `BleBaseControl.mIsConnected`). netsim exposes no connectable vendor GATT,
  *      so the real connect path never completes on an AVD.
  *   2. A formed Wi-Fi Direct (Wi-Fi P2P) group  (`WifiP2pInfo.groupFormed == true`). The emulator
  *      has no `p2p0` interface; `WifiP2pManager.discoverPeers` / `connect` never form a group.

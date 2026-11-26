@@ -10,7 +10,7 @@ data class SyncVpnState(val coversApp: Boolean)
  * Plain explanation for a sync that reached the glasses over Wi-Fi Direct and then failed while a VPN covers the
  * app. A full-tunnel VPN also carries traffic for the glasses' private address: a proxy VPN accepts the request and
  * closes it ("unexpected end of stream") or answers 404/500 itself, and a VPN that does not allow bypassing defeats
- * every flow's routing (field logs mwra0io2 / mwr92qph; firmware_dump add.238 rig reproduction).
+ * every flow's routing (field logs mwra0io2 / mwr92qph, reproduced on a test rig).
  */
 object GlassesSyncVpnHint {
     /** Null unless a VPN covers the app and the Wi-Fi Direct link to the glasses had come up ([glassesReached]). */

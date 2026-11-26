@@ -4,7 +4,7 @@ import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Orchestrates WHEN the HeyCyan post-update command gate (add.240/241/242) is opened, so users never
+ * Orchestrates WHEN the HeyCyan post-update command gate is opened, so users never
  * need the official HeyCyan app:
  *
  *  - [onHeyCyanConnected]: once per (re)connect, query the capability and — only if the unit reports
@@ -35,7 +35,7 @@ class HeyCyanGateController(
     /**
      * The user missed the front-button window on this connection. Background gated commands (sent every ~20 s)
      * then stop re-prompting; a reconnect or a user action ([allowRetryAfterMissedPress], e.g. starting a sync)
-     * tries again. Seen on the add.242 rig: without it the user got a new prompt + "Button not pressed" every 40 s.
+     * tries again. Seen on a test rig: without it the user got a new prompt + "Button not pressed" every 40 s.
      */
     @Volatile
     private var missedPress = false

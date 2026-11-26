@@ -32,7 +32,7 @@ sealed interface GlassesWifiNotify {
         val isNoisyVendorError: Boolean get() = code == NOISY_WIFI_ERROR_CODE
 
         /**
-         * What the glasses meant, from the BR22 firmware (firmware_dump add.236, AM01CY 2.00.10, executed):
+         * What the glasses mean (AM01CY 2.00.10):
          * 1 = their transfer session was torn down, 2 = their watchdog fired because nothing connected or downloaded
          * for ~32 s after their Wi-Fi Direct came up, 3 = the phone connected and then disconnected.
          */

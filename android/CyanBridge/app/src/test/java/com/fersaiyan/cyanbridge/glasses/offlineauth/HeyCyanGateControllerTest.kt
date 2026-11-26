@@ -101,7 +101,7 @@ class HeyCyanGateControllerTest {
     }
 
     /**
-     * add.242 rig: two gated commands NAK 150 ms apart. The second trigger used to get ALREADY_UNLOCKED while the
+     * Test rig: two gated commands NAK 150 ms apart. The second trigger used to get ALREADY_UNLOCKED while the
      * first was still waiting for the press, showed "Glasses activated" over the real prompt and retried the command.
      */
     @Test
@@ -126,7 +126,7 @@ class HeyCyanGateControllerTest {
         assertEquals(0, nestedRetries)
     }
 
-    /** add.242 rig: after a missed press, background NAKs every ~20 s re-prompted forever. */
+    /** Test rig: after a missed press, background NAKs every ~20 s re-prompted forever. */
     @Test
     fun missedPressStopsBackgroundRepromptsUntilUserActionOrReconnect() = runBlocking {
         val controller = controllerFor(SimulatedHeyCyanGlasses(userPressesFrontButton = false))

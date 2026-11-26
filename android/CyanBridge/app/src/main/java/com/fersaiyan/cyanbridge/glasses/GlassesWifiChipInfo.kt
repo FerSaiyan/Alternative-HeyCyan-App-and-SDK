@@ -3,7 +3,7 @@ package com.fersaiyan.cyanbridge.glasses
 /**
  * The HeyCyan glasses' Wi-Fi chip identifiers (V821 hardware + firmware, e.g. "WIFIAM01G1" / "1.00.28") from the
  * last syncDeviceInfo reply in this process, for support reports: field sync failures can then be replayed against
- * the same Wi-Fi firmware image on the emulator rig (firmware_dump sim/v821/images.tsv). Cleared on disconnect.
+ * the same Wi-Fi firmware version on a test rig. Cleared on disconnect.
  */
 object GlassesWifiChipInfo {
     @Volatile var hardwareVersion: String? = null

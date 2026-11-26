@@ -451,7 +451,7 @@ class DeviceBindDestination : NavScreen() {
             }
 
             DeviceClass.EYEVUE -> {
-                // Decompiled EyeVue settings expose 1/3/5/7/10 minute choices; 10 min is max.
+                // The EyeVue app offers 1/3/5/7/10 minute choices; 10 min is max.
                 EyevueManager.getInstance(this).setRecordingDuration(EYEVUE_MAX_RECORDING_SECONDS)
             }
 

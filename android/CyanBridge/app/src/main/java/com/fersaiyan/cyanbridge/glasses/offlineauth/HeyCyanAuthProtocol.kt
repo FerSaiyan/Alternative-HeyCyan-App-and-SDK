@@ -2,12 +2,11 @@ package com.fersaiyan.cyanbridge.glasses.offlineauth
 
 /**
  * HeyCyan (JieLi/Oudmon) native **offline** auth protocol: transport codec, opcodes, and frame
- * codecs, per the add.78 unlock recipe (heycyan_unlock_trace_2026-10-28) reconciled with the add.75
- * gate verdict (m02s_auth_verify_2026-10-28).
+ * codecs.
  *
  * This restores the device owner's own access to their own glasses through the device's own
  * **symmetric** handshake (the public SDK-default link key). It is NOT the HeyCyan cloud auth path
- * (server token), and — per add.78 CORRECTION 1 — it does NOT rely on cmd-114 (0x72), which is a
+ * (server token), and it does NOT rely on cmd-114 (0x72), which is a
  * pure parameter store with no compare/crypto/auth-bit (so no "signature" can or need be produced
  * for it).
  *
@@ -16,7 +15,7 @@ package com.fersaiyan.cyanbridge.glasses.offlineauth
  */
 object HeyCyanAuthProtocol {
 
-    // ---- Oudmon 0xBC command transport (add.78, app-verified e5/p.java) -----------------------
+    // ---- Oudmon 0xBC command transport ---------------------------------------------------------
     // Framing: BC | opcode(1) | len(2 LE) | CRC16-MODBUS-of-payload(2 LE) | payload
     // Empty payload => len 00 00, CRC field FF FF.
 
@@ -32,7 +31,7 @@ object HeyCyanAuthProtocol {
     const val CMD_CAMERA = 0x41
 
     /**
-     * cmd-114 / 0x72: parameter store ONLY. add.78 CORRECTION 1: pure 10-byte store, no compare, no
+     * cmd-114 / 0x72: parameter store ONLY: pure 10-byte store, no compare, no
      * crypto, no auth/bind bit — a dead end for auth. Kept as a named constant so no one re-adds it
      * to the auth flow.
      */
@@ -66,12 +65,12 @@ object HeyCyanAuthProtocol {
     val DEFAULT_USER_ID: ByteArray = byteArrayOf(0x01)
 
     // ---- JieLi RCSP device-auth (FE DC BA channel, NOT 0xBC) ----------------------------------
-    // add.78 step 3: stock jl_bt_ota RcspAuth. Default link key loaded by FUN_0600fd1a.
+    // Stock JieLi RcspAuth with the SDK-default link key.
 
     val RCSP_HEADER: ByteArray = byteArrayOf(0xFE.toByte(), 0xDC.toByte(), 0xBA.toByte())
 
     /**
-     * Reset-auth command (verbatim from add.78 / RcspAuth): FE DC BA C0 06 00 02 00 01 EF.
+     * Reset-auth command (RcspAuth): FE DC BA C0 06 00 02 00 01 EF.
      * Triggers the device to issue its challenge.
      */
     val RCSP_RESET_AUTH: ByteArray = byteArrayOf(
@@ -91,7 +90,7 @@ object HeyCyanAuthProtocol {
     const val CHALLENGE_LEN = 16
 
     /**
-     * SDK-default JieLi link key (public; execution-confirmed loaded by A02S FUN_0600fd1a).
+     * SDK-default JieLi link key (public).
      * 06 77 5f 87 91 8d d4 23 00 5d f1 d8 cf 0c 14 2b
      */
     val DEFAULT_LINK_KEY: ByteArray = byteArrayOf(
@@ -187,9 +186,9 @@ object HeyCyanAuthProtocol {
 
     /**
      * RCSP response frame: FE DC BA | [RCSP_TYPE_RESPONSE] | <16-byte response>. The inner nonce frame
-     * is the add.78 "[type]+16data" form; it is carried on the FE DC BA channel.
-     * RECIPE RESIDUAL (add.78 step 3): the exact FE DC BA sub-framing of the 17-byte nonce frame is
-     * overlay-resident and not byte-traced; the one place to finalize it is here. The response
+     * is the "[type]+16data" form; it is carried on the FE DC BA channel.
+     * The exact FE DC BA sub-framing of the 17-byte nonce frame is not yet confirmed; the one place
+     * to finalize it is here. The response
      * derivation is stock RcspAuth with the default key (see [HeyCyanSymmetricAuth]).
      */
     fun authResponseFrame(response: ByteArray): ByteArray {
@@ -216,7 +215,7 @@ object HeyCyanAuthProtocol {
     fun capabilityByteOf(payload: ByteArray): Int? =
         if (payload.size > CAPABILITY_BYTE_INDEX) payload[CAPABILITY_BYTE_INDEX].toInt() and 0xFF else null
 
-    /** Bind/status reply: status byte at payload offset 1 (add.78 CORRECTION 2: {sub-op, status}). */
+    /** Bind/status reply: status byte at payload offset 1 ({sub-op, status}). */
     fun bindStatusOf(payload: ByteArray): Int? =
         if (payload.size > 1) payload[1].toInt() and 0xFF else null
 }

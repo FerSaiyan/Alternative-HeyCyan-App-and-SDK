@@ -140,9 +140,8 @@ Reference: [Vortex's M02S report](https://gist.github.com/vortex1024/2a9e0bada76
 ### AP mode is a separate transport
 
 Vortex recovered `02 01 14 02` for starting live in AP mode from official app
-1.0.103, but did not test it. In the older local decompilation,
-`android/HeyCyanOfficialApp/app/src/main/java/com/glasssutdio/wear/wifi/ap/TempWifiHelper.java`
-from version `1.0.86_20260115` joins a supplied SSID and WPA2 password using `WifiNetworkSpecifier` and
+1.0.103, but did not test it. The older official app
+`1.0.86_20260115` joins a supplied SSID and WPA2 password using `WifiNetworkSpecifier` and
 `ConnectivityManager.requestNetwork()`, then binds to the returned network.
 Its disconnect path unregisters the callback and restores network binding.
 

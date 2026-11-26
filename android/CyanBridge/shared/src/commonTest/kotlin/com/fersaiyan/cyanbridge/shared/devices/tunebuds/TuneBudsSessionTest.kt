@@ -228,7 +228,7 @@ class TuneBudsSessionTest {
 
     @Test
     fun aCameraSessionWaitsForAQueuedMediaCount() = runTest {
-        // Fw 5621 (add.230): a V821 session asked for while the EF media-count session is queued is accepted and then
+        // Fw 5621: a V821 session asked for while the EF media-count session is queued is accepted and then
         // dropped by the firmware, so E1 must wait for the 0xEF notification.
         val glasses = FakeGlasses()
         val session = sessionWith(glasses)

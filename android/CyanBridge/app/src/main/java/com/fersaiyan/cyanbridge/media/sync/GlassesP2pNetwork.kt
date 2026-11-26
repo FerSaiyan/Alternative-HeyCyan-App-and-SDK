@@ -204,7 +204,7 @@ internal class GlassesP2pNetwork(
         readTimeoutMs: Int,
         onStream: ((InputStream, Long) -> Unit)? = null
     ): Boolean {
-        // VPN-safe route + Range-resume (add.210) cover both non-official flows; the HeyCyan
+        // VPN-safe route + Range-resume cover both non-official flows; the HeyCyan
         // app flow below stays system-routed like the stock app.
         when (downloadFlowMode()) {
             GlassesSyncFlow.ADAPTIVE -> adaptiveActiveRoute()?.let { requestedRoute ->
@@ -270,7 +270,7 @@ internal class GlassesP2pNetwork(
 
     /**
      * An active VPN can capture SYSTEM routing and reset the P2P network mid-transfer; only a
-     * local-address-bound socket is VPN-proof, so it is forced while a VPN is up (add.210).
+     * local-address-bound socket is VPN-proof, so it is forced while a VPN is up.
      */
     private fun vpnHardenedRoute(
         requestedRoute: AdaptiveHttpRoute,

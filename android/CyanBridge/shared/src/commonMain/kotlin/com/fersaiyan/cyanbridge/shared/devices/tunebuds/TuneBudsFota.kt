@@ -9,7 +9,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * AB Mate firmware update over a [TuneBudsSession] (the vendor `com.bluetrum.fota.OtaManager`
- * flow, ported from the owner's add.176 reference):
+ * flow, ported from the owner's reference implementation):
  * - 0xA0 GET_INFO `u32 version | md5(file)[0..4) | u32 size` -> `u32 start | u32 block | u8 allow`
  * - 0xA1 START `u32 start | u32 total | data...`, then 0xA2 SEND_DATA `data...` (no responses)
  * - 0xA3 STATE notify after every block: 00 next block, FE continue, FD pause, FF finished

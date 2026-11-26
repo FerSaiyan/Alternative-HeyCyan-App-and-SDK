@@ -1670,7 +1670,7 @@ class MainActivity : AppCompatActivity() {
     /**
      * Debug helper: log all methods on LargeDataHandler so we can
      * discover additional SDK capabilities (such as WiFi transfer APIs)
-     * without needing decompiled sources.
+     * from the SDK itself.
      */
     private fun logLargeDataHandlerMethodsOnce() {
         if (loggedLargeDataHandlerMethods) return

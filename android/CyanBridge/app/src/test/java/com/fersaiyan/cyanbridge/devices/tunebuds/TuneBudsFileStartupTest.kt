@@ -42,7 +42,7 @@ class TuneBudsFileStartupTest {
     }
 
     @Test fun aDownloadTheFirmwareDropsAtOnceIsStartedAgain() = runTest {
-        // Fw 5621 (add.230): E7 = 0, then work state 0x0D -> 0x03 with no EC/F2/E7 notify when a queued media-count
+        // Fw 5621: E7 = 0, then work state 0x0D -> 0x03 with no EC/F2/E7 notify when a queued media-count
         // session won the V821 power-up. The startup re-sends E7 instead of waiting for its timeout.
         val frames = MutableSharedFlow<TuneBudsFrame>()
         val url = "http://192.168.49.82:80/files/"

@@ -3,8 +3,8 @@
 CyanBridge talks to MemoMind glasses with the protocol the vendor published in its open
 platform: [memomind-open/plugin-open-platform](https://github.com/memomind-open/plugin-open-platform)
 (reviewed at commit `171098b`). The `GlassSDK/docs/` pages there are the source of truth; this
-page summarizes them and records what CyanBridge implements. The older Frida notes in
-[PROTOCOL_NOTES.md](PROTOCOL_NOTES.md) predate the official docs and are wrong in several places
+page summarizes them and records what CyanBridge implements. Older informal notes predate the
+official docs and were wrong in several places
 (see [Discrepancies](#discrepancies-with-the-older-notes)).
 
 ## Links
@@ -304,7 +304,7 @@ shared host is platform-neutral; an iOS host needs, in `iosMain` or Swift:
 
 ## Discrepancies with the older notes
 
-| Older Frida notes | Official docs (followed) |
+| Older notes | Official docs (followed) |
 | --- | --- |
 | Header `fa 00 00 len16 seq group op type`, "type" 01/02/06/08 | `FA len24 event service command`, then TLVs; the "type" byte is the first TLV type (or the checksum's high byte on empty requests) |
 | Primary SPP `0x1101`; `0x7033` "OTA" | Commands on SPP `0x7033`, `0x1101` is the legacy fallback |

@@ -26,8 +26,8 @@ data class DownloadExpectation(
 )
 
 /**
- * The EyeVue vendor's update server (app `com.eyevue.glassapp` 1.0.68, captured 2026-09-30,
- * firmware_dump `RESULTS/reports/eyevue_ota__platform_eyevue-glass/`): an anonymous GET with the
+ * The EyeVue vendor's update server (as used by app `com.eyevue.glassapp` 1.0.68, 2026-09-30):
+ * an anonymous GET with the
  * glasses' firmware version and model code, answered with BLE and Wi-Fi packages on a public
  * Alibaba OSS bucket. No account, token or signature is involved. A null package means the
  * glasses already run the newest one.

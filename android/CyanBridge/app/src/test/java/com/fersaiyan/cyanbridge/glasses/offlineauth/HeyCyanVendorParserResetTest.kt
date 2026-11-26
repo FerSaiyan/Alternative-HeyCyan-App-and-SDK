@@ -11,7 +11,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 /**
- * add.242 rig: an RCSP reply wedged the vendor SDK's BigData reassembler, so the 0x73/0x08 Wi-Fi IP notify after the
+ * Test rig: an RCSP reply wedged the vendor SDK's BigData reassembler, so the 0x73/0x08 Wi-Fi IP notify after the
  * unlock never reached the app and media sync timed out.
  */
 @RunWith(RobolectricTestRunner::class)

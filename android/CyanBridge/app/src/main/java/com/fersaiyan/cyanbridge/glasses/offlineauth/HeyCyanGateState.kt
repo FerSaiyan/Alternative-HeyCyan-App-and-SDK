@@ -1,7 +1,7 @@
 package com.fersaiyan.cyanbridge.glasses.offlineauth
 
 /**
- * Last-seen state of the HeyCyan post-update command gate, for support reports (add.242): the cmd-47
+ * Last-seen state of the HeyCyan post-update command gate, for support reports: the cmd-47
  * capability byte, the device-auth / bind outcomes of the last offline-unlock run, the last gated
  * command that got the `03` NAK, and the terminal unlock result. Cleared on disconnect, like
  * [com.fersaiyan.cyanbridge.glasses.GlassesWifiChipInfo].

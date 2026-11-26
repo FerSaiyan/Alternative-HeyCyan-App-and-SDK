@@ -42,7 +42,7 @@ object HeyCyanAuthRawChannel {
     private val RCSP_B1 = 0xDC
     private val RCSP_B2 = 0xBA
 
-    /** Gated BigData commands whose 1-byte `03` reply is the pre-auth/pre-bind NAK (add.240). */
+    /** Gated BigData commands whose 1-byte `03` reply is the pre-auth/pre-bind NAK. */
     private val GATED_NAK_CMDS = intArrayOf(0x41, 0x45)
     private const val NAK_BYTE = 0x03
 
@@ -176,7 +176,7 @@ object HeyCyanAuthRawChannel {
      * The vendor SDK reassembles de5bf729 notifies in [LargeDataParser] (its own receiver, fed the same broadcasts).
      * It treats any frame that does not start with 0xBC while idle as a continuation: an RCSP reply (`FE DC BA …`)
      * sets its `end` flag to false with a length that never matches, and from then on every 0xBC notify is appended
-     * to that dead buffer. Seen on the add.242 rig: after the unlock, the cmd-65 replies and the 0x73/0x08 Wi-Fi IP
+     * to that dead buffer. Seen on a test rig: after the unlock, the cmd-65 replies and the 0x73/0x08 Wi-Fi IP
      * notify never reached the app and media sync timed out. Reset it after RCSP traffic, on the main thread where
      * LocalBroadcastManager delivers the notifies. `end` is package-private (kept by `-keep class com.oudmon.**`).
      */

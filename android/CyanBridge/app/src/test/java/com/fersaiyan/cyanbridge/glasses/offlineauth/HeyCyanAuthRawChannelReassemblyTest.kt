@@ -6,7 +6,7 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * Replies longer than the link's notification size arrive split. Seen on the add.222 rig (20-byte notifications):
+ * Replies longer than the link's notification size arrive split. Seen on a test rig (20-byte notifications):
  * the 21-byte cmd-0x47 capability reply came as 20 + 1 bytes, the app never matched it and the unlock timed out.
  */
 class HeyCyanAuthRawChannelReassemblyTest {

@@ -26,7 +26,7 @@ package com.fersaiyan.cyanbridge.glasses
  *   data[1] = command id      65 (0x41) routes to GlassModelControlResponse
  *   data[7] = dataType        selects which trailing fields are read
  *
- * Minimum lengths (derived from the vendor offset reads; pinned by add.217):
+ * Minimum lengths (derived from the vendor offset reads):
  *   dataType 1  -> 10   (reads data[8], guarded data[9]/data[10])
  *   dataType 2  -> 11   (reads data[8], copyOfRange(data, 9, 11))
  *   dataType 3  -> 13   (reads data[10], data[11], data[12])

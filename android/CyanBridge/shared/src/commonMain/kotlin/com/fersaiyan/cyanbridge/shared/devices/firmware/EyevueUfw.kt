@@ -16,13 +16,12 @@ data class UfwInspection(
 )
 
 /**
- * The EyeVue (JieLi BR28) `.ufw` checks, the same ones the owner's builder
- * (firmware_dump `eyevue_fw_builder_add175.py`, `Ufw` / `Image` / `verify`) runs, and the ones
- * the glasses' own update code checks first (header CRC, chip):
+ * The EyeVue (JieLi BR28) `.ufw` checks, the same ones the owner's firmware builder runs, and the
+ * ones the glasses check first (header CRC, chip):
  * - the 0x40-byte header, de-obfuscated with the JieLi LFSR keystream (key 0xFFFF): header CRC
  *   over [2, 0x40), file size, record-list CRC over the raw records, chip `AC701N`, `JLUFW` trailer;
  * - the `flash.bin` record's CRC over its raw payload;
- * - the application area (`app_area_head`, SFC-decrypted): its header CRC and data CRC over
+ * - the application area (`app_area_head`, after SFC decoding): its header CRC and data CRC over
  *   [0x2420, end of app).
  */
 object EyevueUfw {
@@ -104,7 +103,7 @@ object EyevueUfw {
         return out
     }
 
-    /** SFC decryption of [from, to): 32-byte blocks, each keyed by its file offset. */
+    /** SFC decoding of [from, to): 32-byte blocks, each keyed by its file offset. */
     private fun sfcDecrypt(raw: ByteArray, from: Int, to: Int): ByteArray {
         val out = ByteArray(to - from)
         var block = from

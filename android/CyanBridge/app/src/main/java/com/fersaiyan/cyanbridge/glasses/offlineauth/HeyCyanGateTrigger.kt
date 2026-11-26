@@ -56,7 +56,7 @@ object HeyCyanGateTrigger {
     }
 
     /**
-     * The connect event arrives before the SDK has enabled notifications (add.242 rig: the first raw write went
+     * The connect event arrives before the SDK has enabled notifications (on a test rig the first raw write went
      * out 3 ms before onServiceDiscovered and its reply was lost, ending in TRANSPORT_ERROR). Wait for the first
      * vendor notify of this connection (the SDK's own connect-time reads produce one), at most [NOTIFY_WAIT_MS].
      */

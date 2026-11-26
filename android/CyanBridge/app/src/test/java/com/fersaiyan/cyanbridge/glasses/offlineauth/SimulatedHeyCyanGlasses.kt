@@ -3,17 +3,16 @@ package com.fersaiyan.cyanbridge.glasses.offlineauth
 import kotlin.random.Random
 
 /**
- * In-JVM simulated HeyCyan post-auth (M02S/A02S) unit, speaking the real add.78 wire framing
+ * In-JVM simulated HeyCyan post-auth (M02S/A02S) unit, speaking the real wire framing
  * (0xBC transport + CRC-16/MODBUS for commands; FE DC BA RCSP for device-auth) and modeling the
- * add.75 camera gate: the camera (opcode 0x41) is served only once the BT link is encrypted AND
+ * camera gate: the camera (opcode 0x41) is served only once the BT link is encrypted AND
  * device-auth (RCSP symmetric handshake with the default link key) is satisfied AND the unit is bound
  * to us.
  *
  * It returns the UNWRAPPED inner payload to the state machine (as the real transport will after it
  * strips the 0xBC/FE-DC-BA framing). The simulator and the app under test share the same
  * [HeyCyanSymmetricAuth], so a passing test proves the state machine + bind flow flips the gate given
- * the symmetric handshake; it does not assert the exact RCSP challenge-derivation bytes (add.78 step-3
- * residual), which must be validated from stock RcspAuth on the owner device.
+ * the symmetric handshake; it does not assert the exact RCSP challenge-derivation bytes, which must be validated from stock RcspAuth on the owner device.
  */
 class SimulatedHeyCyanGlasses(
     private val capabilityByte: Int = HeyCyanAuthProtocol.CAP_M02S_BOTH_REQUIRED,

@@ -50,23 +50,13 @@ token: <auth-token>
 
 Request body includes `appId`, `uid`, `hardwareVersion`, `romVersion`, `os`, `mac`, `country`, `dev`.
 
-### Capturing OTA URLs with Frida
-
-The Frida scripts in `HeyCyanOfficialApp/frida/` can intercept the app's OTA flow:
-
-1. **`heycyan_ota_intercept.js`** — full intercept: captures token, API parameters, download URLs, blocks DFU
-2. **`heycyan_ota_api_trace.js`** — lightweight: logs API parameters only
-3. **`heycyan_official_ota_trace.js`** — BLE/DFU protocol tracer
-
-See `HeyCyanOfficialApp/FRIDA_OTA_INTERCEPT_GUIDE.md` for the full guide.
-
 ### Known Working Token (Guest Account)
 
 ```
 token: 15ef6eb5403406c1da0dc4a4defa2ea1
 ```
 
-This is a guest/anonymous account. It may expire. Re-run the Frida script to capture a fresh one.
+This is a guest/anonymous account. It may expire.
 
 ### Querying for firmware
 
