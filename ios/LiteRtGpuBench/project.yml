@@ -1,0 +1,81 @@
+# LiteRtGpuBench: CPU vs Metal GPU benchmark for CyanBridge's LiteRT models on iPhone.
+# A small host app plus one XCTest bundle, so Google's Device Run (iOS = XCTest only) can run it.
+# The app is model-agnostic: models, inputs and bench_plan.json are pushed into the app's
+# Documents folder at submit time (gcloud --other-files-to-push), results come back from
+# Documents/bench_out (--paths-to-pull). Generate the Xcode project with `xcodegen generate`
+# (scripts/build_xctest_zip.sh does it).
+name: LiteRtGpuBench
+options:
+  bundleIdPrefix: dev.litertgpubench
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+packages:
+  LiteRT:
+    url: https://github.com/google-ai-edge/LiteRT-Swift
+    exactVersion: 2.4.0
+settings:
+  base:
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+    SWIFT_VERSION: "5.0"
+    # Overridden by scripts/build_xctest_zip.sh (BUNDLE_ID); the test bundle appends ".tests".
+    BENCH_BUNDLE_ID: dev.litertgpubench.app
+targets:
+  LiteRtGpuBench:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    dependencies:
+      - package: LiteRT
+        product: LiteRT
+      # Dynamic framework that LiteRT dlopen()s by name for GPU (Metal) runs; must be embedded.
+      - package: LiteRT
+        product: LiteRtMetalAccelerator
+      - sdk: Metal.framework
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: LiteRT GPU Bench
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BENCH_BUNDLE_ID)
+        TARGETED_DEVICE_FAMILY: "1,2"
+        # The XCTest calls BenchRunner through @testable import, also in Release.
+        ENABLE_TESTABILITY: YES
+        SWIFT_OPTIMIZATION_LEVEL: "-O"
+  LiteRtGpuBenchTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: LiteRtGpuBench
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BENCH_BUNDLE_ID).tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_OPTIMIZATION_LEVEL: "-O"
+schemes:
+  LiteRtGpuBench:
+    build:
+      targets:
+        LiteRtGpuBench: all
+        LiteRtGpuBenchTests: [test]
+    run:
+      config: Release
+    test:
+      # Release: the timed code is the code a shipping app would run (Google's DDP sample does the same).
+      config: Release
+      targets:
+        - LiteRtGpuBenchTests
