@@ -50,26 +50,20 @@ token: <auth-token>
 
 Request body includes `appId`, `uid`, `hardwareVersion`, `romVersion`, `os`, `mac`, `country`, `dev`.
 
-### Known Working Token (Guest Account)
-
-```
-token: 15ef6eb5403406c1da0dc4a4defa2ea1
-```
-
-This is a guest/anonymous account. It may expire.
-
 ### Querying for firmware
+
+Pass your own account token; none is published here.
 
 ```bash
 # BT firmware (.bin) — returns encrypted container for JieLi processor
 python3 scripts/probe_last_ota.py \
-  --token '15ef6eb5403406c1da0dc4a4defa2ea1' \
+  --token '<auth-token>' \
   --hardware-version AM01G1_V9.2 \
   --rom-version AM01G1_9.20.00_2510111600
 
 # Wi-Fi firmware (.swu) — returns cpio archive for V821 processor
 python3 scripts/probe_last_ota.py \
-  --token '15ef6eb5403406c1da0dc4a4defa2ea1' \
+  --token '<auth-token>' \
   --hardware-version WIFIAM01G1_V9.2 \
   --rom-version WIFIAM01G1_9.2_1.00.00_2501010000
 ```
