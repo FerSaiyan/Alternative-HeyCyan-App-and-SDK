@@ -1,12 +1,11 @@
 # HeyCyan Smart Glasses (Android) - Data Transfer Notes
 
 This file is the living reference for how CyanBridge transfers media from the glasses to the phone.
-It replaces older/incorrect assumptions from the initial reverse-engineering phase.
+It replaces older/incorrect assumptions from early protocol work.
 
 ## Repository layout
 
 - `android/CyanBridge/` - Android app (CyanBridge) we modify and ship.
-- `android/HeyCyanOfficialApp/` - Decompiled sources from the official app, used as a protocol reference.
 - `android/CyanBridge/app/libs/glasses_sdk_*.aar` - Vendor SDK used by both apps.
 
 ## Working media transfer (BLE + Wi-Fi Direct HTTP)
@@ -103,14 +102,14 @@ TuneBuds uses its independent AB Mate Classic Bluetooth RFCOMM protocol, not the
 
 Hardware testing on 2026-09-02 found that the Detailed permission rationale appeared but could not launch Android's permission sheet because `TuneBudsDashboardActionPolicy` rejected `RequestTransportPermission` and `DismissTransportPermissionDialog`. This was an action-gating bug, not a crash or ANR. Keep both actions in the TuneBuds allowlist while Detailed capture is exposed.
 
-The same test produced an incomplete 4,084-byte Clearer image and then lost the next `0xE1` response. The cause matched the decompiled official AB Mate stack:
+The same test produced an incomplete 4,084-byte Clearer image and then lost the next `0xE1` response. The cause matched how the official AB Mate stack behaves:
 
 - `PacketParser` removes `55 AA ... A5 5A` AI envelopes from the shared RFCOMM stream.
 - `ResponseHandler` logs top-level sequence gaps but still processes structurally valid command frames.
 - CyanBridge must not discard a valid frame solely because its transport sequence skipped. Doing so can lose `0xE3` JPEG chunks and subsequent responses.
 - Logical fragment indexes and command/type/total metadata should remain strict.
 
-Relevant decompiled references are `TuneBudsOfficialApp/tunebuds-jadx-clean/sources/com/topstep/aibuds/earphone/PacketParser.java`, `com/bluetrum/devicemanager/ResponseHandler.java`, `ResponseMerger.java`, `models/AIPicPackage.java`, and `com/topstep/aibuds/earphone/AiPhotoSourceAbMate.java`. The full investigation is recorded in `android/TUNEBUDS_REVERSE_ENGINEERING.md`. Hardware verification of the patched BLE and Wi-Fi paths is still pending.
+Hardware verification of the patched BLE and Wi-Fi paths is still pending.
 
 The first patched retest validated Clearer with a 192x144, 8,597-byte JPEG in 4,872 ms. Detailed exposed a second permission bug: Android 13+ successfully granted `NEARBY_WIFI_DEVICES`, but `TuneBudsLocalHotspot` separately required ungranted fine location and stopped before calling `startLocalOnlyHotspot`. Keep its permission check aligned with `PermissionUtil.hasWifiP2pPermission()`: Nearby Wi-Fi on Android 13+, fine location only on older releases. Detailed endpoint/HTTP validation is still pending.
 
@@ -132,7 +131,6 @@ The same APK passed a Clearer regression with a valid 192x144, 10,221-byte JPEG 
 
 ### TuneBuds media command re-audit (2026-10-04)
 
-- See `CyanBridge/docs/TUNEBUDS_MEDIA_COMMAND_AUDIT.md` and the October 4 section in `TUNEBUDS_REVERSE_ENGINEERING.md` for the vendor-source comparison.
 - The complete official `startPullFileInternal` treats `0xE7` statuses **1/3/5** as busy and **4** as low battery. The earlier hardware investigation observed only 1/3; keep the full vendor mapping.
 - Ordinary TuneBuds sync now tries an isolated P2P path when Wi-Fi capability bit `0x04` is reported: `0xE6` mode 2 with generated `AiGlassDb_` SSID, empty `0xE7`, `0xEC=2`, six-byte `0xF2`, peer MAC/name matching, WPS PBC, group-owner intent 15 on Android 10+, and HTTP sockets bound to the group Network. The device's `0xE7` URL is the target, never the phone group-owner IP.
 - P2P transport failure can fall back to the previously hardware-validated local-only hotspot after camera/group cleanup. Unknown capabilities keep the hotspot path. Glasses-hosted AP mode 1 is still not implemented.
@@ -180,8 +178,6 @@ The same APK passed a Clearer regression with a valid 192x144, 10,221-byte JPEG 
 - Network policy: `android/CyanBridge/app/src/main/res/xml/network_security_config.xml`
 
 ## How the official app differs (relevant parts)
-
-Use this only as a protocol reference in `android/HeyCyanOfficialApp/`.
 
 - Album import registers a notify listener with `cmdType=2`.
 - It downloads `media.config` from `/files/media.config` and then files from `/files/<name>`.
@@ -284,32 +280,6 @@ Typical command used in this project:
 adb logcat -d -s DataDownload DeviceNotify WifiP2pManagerSingleton WifiP2pBroadcastReceiver BleIpBridge LDHMethods
 ```
 
-## How to compare official vs. sample app behavior
-
-1. **Find relevant decompiled classes**
-   - In `HeyCyanOfficialApp/`, search with `rg` or your IDE for:
-     - `LargeDataHandler.getInstance().glassesControl(` – to see how official flows drive the glasses.
-     - `writeIpToSoc`, `syncPictureThumbnails`, `syncHeartBeat`, etc.
-     - UI entrypoints like `PictureFragment`, `AlbumDepository`, or OTA activities that handle imports.
-   - Map the commands (payload arrays) and the order in which they’re called.
-
-2. **Compare P2P controller**
-   - Look for the vendor `WifiP2pManagerSingleton` in `HeyCyanOfficialApp` and ensure:
-     - Intent actions (`WIFI_P2P_CONNECTION_STATE_CHANGE_ACTION` vs. `WIFI_P2P_CONNECTION_CHANGED_ACTION`).
-     - Retry logic (`discoveryTimeOut`, `connectTimeOut`) matches what we run in the sample.
-   - Confirm where the vendor app actually calls `resetDeviceP2p()` and where it sends `[2,1,15]` over BLE.
-
-3. **Compare notify handling**
-   - In the decompiled app, locate the `GlassesDeviceNotifyListener` used for album/import flows.
-   - See how they interpret `loadData[6] == 0x08` and `0x09`:
-     - When do they treat errors as fatal?
-     - When do they just retry P2P and keep waiting for an IP?
-
-4. **Compare HTTP behavior**
-   - Search `\"media.config\"` or `\"/files/\"` in `HeyCyanOfficialApp`:
-     - Identify the exact URLs, timeouts, and error handling for media and OTA downloads.
-   - Match our `downloadMediaList`/`AlbumDownloader` behavior to those URLs and paths.
-
 ## Investigation hints / pitfalls
 
 - **Do not over‑edit the P2P layer**:
@@ -335,225 +305,24 @@ adb logcat -d -s DataDownload DeviceNotify WifiP2pManagerSingleton WifiP2pBroadc
     - Force‑stopped, if we want to confirm the sample can download on its own, or
     - Intentionally left running, if we’re trying to see cooperative behavior.
 
-## OTA investigation notes
+## Hardware simulators
 
-- OTP/OTA support is present in the SDK and official app:
-  - Look for classes like `OTAActivity`, `startSocOtaServer`, or HTTP URLs containing firmware filenames.
-  - `writeIpToSoc("http://<ip>:8080/<firmwareName>", ...)` is used to tell the glasses where to fetch OTA data.
-- For future work on OTA logging/dumping:
-  - Identify OTA configuration endpoints and firmware download URLs.
-  - Log the full HTTP requests (host, path, headers) from the official app.
-  - Observe how OTA binaries are chunked and written to the glasses via BLE or Wi‑Fi (glassesControl/BigData handlers).
+End-to-end simulator lanes for the glasses families are maintained outside this repository; do not add simulator
+code, firmware images or their notes here.
 
-### OTA HTTP APIs (current understanding)
-
-- Base API host (from decompiled app + MITM):
-  - `https://www.qlifesnap.com/glasses/`
-- Relevant endpoints we have observed via MITM:
-  - `POST /glasses/encryption/getKeys`
-  - `GET  /glasses/device/scanConfig?app=HeyCyan`
-  - `POST /glasses/app-update/appLastVersion`
-  - `POST /glasses/app-update/last-ota`
-  - `POST /glasses/app-update/last-ota/china`
-- The OTA metadata call uses a `LastOtaRequest` JSON body:
-
-  ```jsonc
-  {
-    "appId": 1,
-    "country": "US",          // or "CN" for the China endpoint
-    "dev": 2,
-    "hardwareVersion": "WIFIAM01G1_V9.2",
-    "mac": "C4:E3:BF:C3:A4:02",
-    "os": 1,
-    "romVersion": "WIFIAM01G1_1.00.23_2510111600"
-  }
-  ```
-
-- The server response shape when **no update is available** (what we see today) is:
-
-  ```json
-  { "message": "No upgraded version", "retCode": 60001 }
-  ```
-
-  When an update exists, we expect a success `retCode` and a `downloadUrl` pointing at an `.swu` in the `qcwxfactory.oss-cn-beijing.aliyuncs.com` bucket. We have not yet observed such a response for the current glasses firmware.
-
-### Example curl for `last-ota`
-
-> NOTE: Tokens are short-lived account secrets; never commit real tokens.
-
-```bash
-curl -v \
-  -H 'Content-Type: application/json; charset=UTF-8' \
-  -H 'token: <token>' \
-  --data '{"appId":1,"country":"US","dev":2,"hardwareVersion":"WIFIAM01G1_V9.2","mac":"C4:E3:BF:C3:A4:02","os":1,"romVersion":"WIFIAM01G1_1.00.23_2510111600"}' \
-  'https://www.qlifesnap.com/glasses/app-update/last-ota'
-```
-
-On the current firmware this returns:
-
-```json
-{"message":"No upgraded version","retCode":60001}
-```
-
-Changing `country` (`US` ↔ `CN`) or tweaking `romVersion` (e.g. pretending to be older) did **not** produce a `downloadUrl`, which strongly suggests the backend decides “latest vs. not” based on server‑side state, not the client‑supplied version string.
-
-### OSS bucket and `.swu` downloads
-
-- The official app’s debug code uses a pattern like:
-
-  ```text
-  https://qcwxfactory.oss-cn-beijing.aliyuncs.com/bin/glasses/<wifiHwVersion>.swu
-  ```
-
-- We attempted:
-
-  ```bash
-  curl -L -o WIFIAM01G1_V9.2.swu \
-    'https://qcwxfactory.oss-cn-beijing.aliyuncs.com/bin/glasses/WIFIAM01G1_V9.2.swu'
-  ```
-
-  and received an XML `AccessDenied` error from OSS (“no right to access this object because of bucket acl”), which means these objects require a signed or otherwise authorized URL coming from the OTA API (`downloadUrl` in a successful `last-ota` response).
-
-- Until the server actually advertises a Wi‑Fi OTA (i.e. `last-ota` returns a success `retCode` plus `downloadUrl`), we cannot legitimately pull a real `.swu` for this hardware from the vendor’s infrastructure.
-
-### MITM workflow for capturing OTA traffic and tokens
-
-- We successfully used **mitmproxy** plus a Magisk module to intercept HeyCyan’s HTTPS traffic:
-  - Magisk module: `Always Trust User Certificates` (or any equivalent “trust user CAs as system CAs” module).
-  - Install the mitmproxy CA as a **CA certificate**, not as a Wi‑Fi/identity cert:
-    - Visit `http://mitm.it/` in the phone browser (with the proxy configured).
-    - Download the Android CA and install it under security / trusted credentials.
-  - Configure the phone’s Wi‑Fi proxy to point at the PC running mitmproxy:
-
-    ```text
-    Proxy host: <PC LAN IP>   # e.g. 192.168.1.50
-    Proxy port: 8080
-    ```
-
-  - Turn **mobile data off** so HeyCyan can’t bypass via LTE.
-  - Run mitmproxy on the PC:
-
-    ```bash
-    mitmproxy --listen-port 8080
-    ```
-
-  - In mitmproxy, filter for the vendor domain:
-
-    ```text
-    f
-    ~d qlifesnap.com
-    ```
-
-  - Force‑stop HeyCyan, then reopen it and navigate to the About / OTA screen. You should see:
-    - `POST /glasses/encryption/getKeys`
-    - `GET /glasses/device/scanConfig?app=HeyCyan`
-    - `POST /glasses/app-update/last-ota` (and sometimes `/last-ota/china`).
-
-- The `token` header used by Retrofit is visible in these flows. This is the same value that `QcRetrofitClient` injects from `UserConfig.userToken`. Because user data in `/data/data/com.glasssutdio.wear` is stored in encrypted MMKV, MITM is currently the most practical way to retrieve a working token.
-
-#### Pitfalls we hit with MITM
-
-- **Wrong certificate type**:
-  - Installing the mitmproxy cert as a *Wi‑Fi* credential causes TLS handshake failures and “no Internet” errors. It must be installed as a CA certificate and trusted system‑wide (with the Magisk module).
-- **Mixed app behavior**:
-  - Some apps (YouTube, Reddit) still reject the MITM cert and show “no connection”. Chrome and HeyCyan do work once the CA is correctly installed.
-- **OTA button not always doing a fresh network call**:
-  - The “check for update” UI in HeyCyan can display “already latest” even with all radios off, which suggests it sometimes uses cached state rather than hitting `last-ota` on demand. For clean captures, force‑stop the app before opening the OTA screen.
-
-### Local tooling for future `.swu` analysis
-
-- There is a helper script at the Android repo root:
-  - `parse_swu.py`
-  - Usage:
-
-    ```bash
-    cd android
-    python parse_swu.py <firmware>.swu
-    ```
-
-  - It:
-    - Detects obvious container types (gzip/zip/tar/ELF/squashfs).
-    - Warns if the file is actually an XML error (e.g. OSS `AccessDenied`).
-    - Scans for chip‑related markers (e.g. `JL7018`, `ALLWINNER`, `V821`) to help distinguish JL7018F vs. Allwinner V821L2 payloads.
-
-Once a real `.swu` is available (via a successful `last-ota` response with `downloadUrl`), future agents should:
-
-1. Download it with curl.
-2. Run `file` and `parse_swu.py` on it.
-3. Use binwalk / custom scripts to carve out the JL7018F and Allwinner V821L2 images.
-
-### Future firmware‑dump directions (high‑level)
-
-If the cloud OTA API continues to return “No upgraded version” for a long time, there are still a few *local* angles that look promising. Treat the notes below as ideas to explore, not as fully baked procedures:
-
-1. **Leverage “pull‑mode” OTA over Wi‑Fi**
-   - The SDK path used by the official app includes calls like `writeIpToSoc("http://<ip>:8080/<firmwareName>", ...)` and helpers such as `startSocOtaServer(...)` in `OTAActivity`.
-   - Conceptually, this lets the **phone tell the glasses where to fetch an OTA image over HTTP**, using the existing Wi‑Fi P2P link.
-   - A future agent could:
-     - Run a small HTTP server on the phone/PC (e.g. `python -m http.server 8080`).
-     - Place a known test file (dummy `.swu`) in that directory.
-     - Call `writeIpToSoc("http://<phone-ip>:8080/dummy.swu", ...)` from a thin wrapper in the demo app or from a test activity modeled after `OTAActivity`.
-     - Observe the incoming HTTP requests from the glasses (range/offset patterns, headers, etc.) to better understand how the SoC expects OTA payloads to be structured.
-   - This does **not** depend on the vendor OTA servers and should work even when the cloud reports “already up to date”.
-
-2. **Explore LargeDataHandler / BigData op‑codes for diagnostic dumps**
-   - The same SDK namespace (`LargeDataHandler`, `BigData*`, etc.) already streams large media files and OTA state over BLE.
-   - Decompiled code shows that there are additional op‑codes beyond the ones used in the sample app (some appear to relate to logs or diagnostics).
-   - Future work:
-     - Use reflection or static analysis on `glasses_sdk_*.aar` and the decompiled HeyCyan app to catalog `LargeDataHandler` methods and their op‑codes.
-     - Compare those to how the official app handles crash logs or internal diagnostics (often gated behind “engineer” / debug UI).
-     - If safe, add a narrow Kotlin wrapper in the sample app that invokes *documented* diagnostic/dump methods and writes the resulting bytes to storage on the phone for analysis.
-   - Keep changes minimal and well‑logged; avoid blindly poking unknown op‑codes on user hardware.
-
-3. **Hardware‑level investigation (ISP / FEL / debug pads)**
-   - The headset uses a JL7018F main controller and an Allwinner V821L2 co‑processor; both families are known (from other products) to expose low‑level USB/boot modes for firmware provisioning.
-   - PCB‑level investigation (only for experienced hardware folks, with full awareness of warranty and legal implications):
-     - Carefully identify any labelled test pads / boot jumpers on the board (e.g. pads near USB‑C that might correspond to “BOOT”, “FEL”, etc.).
-     - With the battery disconnected and ESD precautions in place, verify via `lsusb` whether holding certain buttons or shorting documented pads at power‑on exposes a new USB device (indicating a ROM loader or download mode).
-     - If such a mode exists, consult chip‑family documentation and community tooling for **read‑only** flash inspection first (before attempting any writes).
-   - This is invasive work; it should be treated as a last resort and documented carefully if attempted. Do **not** assume that methods used on other JL/Allwinner boards are safe here without verification.
-
-## Glasses emulators for app testing (HeyCyan, EyeVue, TuneBuds, Even G2)
-
-CyanBridge can be tested end to end on Android emulators against simulated glasses that run the glasses' own
-firmware code. The simulators, their CI and all reverse-engineering notes live ONLY in the private firmware repo
-(checked out at `firmware_dump/`). Do not copy simulator code, firmware or RE notes
-into this repository. Index there: `docs/EMULATORS_AND_SIMULATORS.md` (§5 = every app lane with command, AVDs and
-ports); recipe and gotchas: `docs/AVD_BLE_P2P_HOWTO.md`. Worklog entries are `add.N` in `firmware_dump/worklog.md`.
-
-| Glasses | What the app talks to | App lane (in `firmware_dump/`) | Covers |
-|---|---|---|---|
-| HeyCyan | vendor BLE GATT to the Bluetooth chip model + Wi-Fi Direct to the real camera-chip media server | `sim/e2e_bt_p2p/run_e2e.sh start` · `sync official\|custom\|adaptive\|saved` · `stop` | pairing, the 3 media-sync flows (add.222/224) |
-| EyeVue | BLE GATT to the real Bluetooth-chip firmware code + Wi-Fi Direct to the real camera-chip HTTP server | `sim/eyevue_e2e/run_e2e.sh start` · `sync` · `stop` | commands, Wi-Fi start, file sync (add.227/229) |
-| TuneBuds | Classic Bluetooth SPP to the real controller firmware + Wi-Fi Direct to the real camera-chip userland | `sim/tunebuds_e2e/run_avd.sh start` · `pair` · `flows` · `wifi` · `photo` · `sync` · `stop` | battery, version, media count, photo + sync (add.228/230) |
-| Even Realities G2 (MentraOS) | Mentra SDK over BLE to the original G2 firmware (right arm) + a stand-in left arm | `sim/even_g2_e2e/run_avd.sh start` · `pair` · `check` · `features` · `stop` | Device Bind pairing, bond, reconnects, battery, display panel test text + notification forwarding (add.234) |
-
-Rules for every lane:
-- One lane at a time: hold `firmware_dump/sim/tools/device-lane.sh acquire <you>`. Never run an emulator while a
-  Gradle build runs (emulator + large builds have OOM-killed other work); the lanes also hold the Gradle lock.
-- Use the existing AVDs only, as `-read-only` instances: `Pixel_9a` for the app, `HeyCyan_Frida` as the second radio
-  (Wi-Fi Direct GO/client). Never create AVDs; the disk is nearly full.
-- Emulator >= 36.5 (Wi-Fi Direct between AVDs needs the netsim Wi-Fi medium), Bumble 0.0.236 on `android-netsim`.
+Rules for every emulator lane:
+- One lane at a time. Never run an emulator while a Gradle build runs (emulator + large builds have OOM-killed
+  other work).
+- Use the existing AVDs only, as `-read-only` instances. Never create AVDs; the disk is nearly full.
+- Emulator >= 36.5 (Wi-Fi Direct between AVDs needs the netsim Wi-Fi medium).
 - Use emulator ports 5555-5585: adb rediscovers only that range after a server restart.
 - The AVD logcat ring rotates within seconds under SDK logging: stream `adb logcat` to a file and grep it with `-a`.
 - Killing the app while one of its GATT requests is still outstanding, on a link that stays up, can wedge Android's
-  GATT client for that device until Bluetooth is toggled (seen on the slow G2 simulator). Wait for the link to go idle
-  before a force-stop in tests.
-
-App bugs these rigs found (check whether your branch has the fix):
-- HeyCyan: Wi-Fi Direct join torn down by our own discovery timeout at connect +4.0 s, and the vendor `.aar`
-  battery parser throwing on short frames (guarded in the patched `.aar`) (add.223/224). In `main`.
-- TuneBuds: Wi-Fi Direct selection when the camera chip reports no Wi-Fi mask, and lost sessions behind a queued
-  media count (add.228/230). In `main`.
-- Mentra display glasses (G1/G2/Display/NIMO/AR99): Device Bind could not pair because the picker's teardown
-  cancelled the pairing scan (`NOT_FOUND` about 10 ms after the scan started), and phone notifications were only
-  forwarded after visiting the MemoMind screen (add.234). Fixed on branch `mentra-display-pairing-scan` (pairing scan
-  in its own session; display-glasses panel with Show test text, Clear display, Forward notifications). Not in
-  2.4.3.
+  GATT client for that device until Bluetooth is toggled. Wait for the link to go idle before a force-stop in tests.
 
 ## General guidance for future Codex agents
 
-- Treat the vendor SDK (`.aar`) and decompiled code as authoritative for protocol details; keep our glue code thin and well‑logged.
+- Treat the vendor SDK (`.aar`) as authoritative for protocol details; keep our glue code thin and well‑logged.
 - When something works in the official app but not in the sample:
   - First compare **method sequences and payloads** (what SDK calls, in what order).
   - Then compare **state machines** (when they retry, when they reset, when they treat an error as fatal).

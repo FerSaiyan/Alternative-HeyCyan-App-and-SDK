@@ -30,7 +30,7 @@ target/
 # Runtime app data
 */com.glasssutdio.wear/*
 
-# Firmware dump - skip results, legacy, pure dumps
+# Local-only directory: skip its large result folders
 firmware_dump/RESULTS/
 firmware_dump/LEGACY/
 firmware_dump/Pure_Firmware_Dumps/

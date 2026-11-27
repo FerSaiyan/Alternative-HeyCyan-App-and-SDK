@@ -157,7 +157,7 @@ Problems requiring correction:
 ## Concurrent EyeVue changes
 
 `3872ff3` makes sensible protocol corrections: inbound AC55, manual versus AI
-shutter separation, and video-start value 0 match the decompiled vendor sources.
+shutter separation, and video-start value 0 match the vendor app's behaviour.
 `4e1e45a` fixes a real media-format problem by saving EyeVue WAV as WAV instead
 of wrapping it as Opus; its audio MediaStore path and per-file sync tolerance
 also address transport/import behavior.

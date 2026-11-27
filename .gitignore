@@ -49,10 +49,9 @@ QCSDK.framework/
 # Device data dumps
 com.glasssutdio.wear/
 
-# Reference docs and decompiled apps (Keeping repo clean)
+# Local reference material (kept out of the repo)
 HeyCyanOfficialApp/
-eyevue-jadx/
-android/eyevue-jadx/
+*-jadx/
 android/TuneBudsOfficialApp/
 Android_SDK_Development_Guide_CN.pdf
 
@@ -184,3 +183,16 @@ graphify-out/
 # Local recovery/export snapshots
 backups/
 android/CyanBridge/_local_termux_server_phone_current/
+
+# Worklogs and internal notes live outside this repository
+worklog.md
+/BRIDGE_RESEARCH_NOTES.md
+/BRIDGE_AGENT_PROMPT.md
+/android/EYEVUE_LIVESTREAM_FINDINGS.md
+/android/DATA_SYNC_COMMAND_AUDIT_20260909.md
+/android/CyanBridge/docs/memomind/PROTOCOL_NOTES.md
+/android/CyanBridge/docs/WIFI_ADB_DEBUG_FIRMWARE.md
+/android/CyanBridge/docs/WIFI_ADB_DEBUG_FIRMWARE_AUDIT.md
+/android/CyanBridge/docs/TUNEBUDS_MEDIA_COMMAND_AUDIT.md
+/android/CyanBridge/docs/HEYCYAN_BLE_PHOTO_ISSUE_23_AUDIT.md
+/docs/EMULATOR_RETENTION.md

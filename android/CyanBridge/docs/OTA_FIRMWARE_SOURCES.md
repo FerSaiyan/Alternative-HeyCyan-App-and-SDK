@@ -30,7 +30,7 @@ request or download fails, neither component is flashed.
   phone's HTTP server.
 - JieLi BLE firmware uses `.bin` through the vendor `DfuHandle` state machine.
 
-The decompiled official HeyCyan `OTAActivity` starts Wi-Fi OTA first. On a successful
+The official HeyCyan app's OTA screen starts Wi-Fi OTA first. On a successful
 Wi-Fi completion notification (`loadData[6] == 0x07` and `loadData[7] == 1`), its
 *app* explicitly requests and starts the BLE `.bin` update. The glasses do not
 autonomously begin BLE DFU because a `.swu` succeeded. The official activity has no

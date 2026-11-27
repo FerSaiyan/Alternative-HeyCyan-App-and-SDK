@@ -70,8 +70,7 @@ object GlassesConditionState {
 /**
  * What to tell the user when a HeyCyan media sync never saw the glasses' Wi-Fi Direct peer.
  *
- * Firmware facts (firmware_dump add.236, BR22 AM01CY 2.00.10 executed in the pi32v2 emulator; same rules in the V2.2
- * builds around the field build 2.20.10):
+ * Observed glasses behaviour (AM01CY 2.00.10; same rules in the V2.2 builds around the field build 2.20.10):
  * - The transfer-mode reply carrying the peer name (`dataType 1`, `errorCode 1`) is sent only after the Wi-Fi chip
  *   reported that Wi-Fi Direct is up; the glasses then wait up to 119 s for the phone.
  * - Charging never blocks the Wi-Fi start; only low battery while not charging does (start <= 15 %, session <= 9 %).

@@ -265,7 +265,7 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
         wifiP2pDevice = device
         val config = WifiP2pConfig().apply {
             deviceAddress = device.deviceAddress
-            // Match decompiled vendor app: WPS PBC.
+            // Match the vendor app: WPS PBC.
             wps.setup = 0
         }
 
@@ -377,7 +377,7 @@ class WifiP2pManagerSingleton private constructor(private val context: Context) 
             return
         }
         if (isJoinInFlight()) {
-            // Re-initializing the channel here would abort our own join (add.223).
+            // Re-initializing the channel here would abort our own join.
             Log.d(TAG, "restartPeerDiscovery skipped: P2P join in flight")
             return
         }

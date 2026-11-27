@@ -106,7 +106,7 @@ class TuneBudsSession(private val transport: TuneBudsTransport) {
     /**
      * EF answered 0: the firmware queued a camera-coprocessor (V821) media-count session and will send the counts as an
      * 0xEF notification. Firmware 5621 accepts a new V821 session (E1, E3/E4, E6+E7, E8) while that EF session is queued
-     * but not yet powered, then drops it when the EF power-up wins (add.230, QUEN start_download 0x1001c30a returns busy).
+     * but not yet powered, then drops it when the EF power-up wins (the download start then reports busy).
      */
     private val mediaCountsPending = MutableStateFlow(false)
 

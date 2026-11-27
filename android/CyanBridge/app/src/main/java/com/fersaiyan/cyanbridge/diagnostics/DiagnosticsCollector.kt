@@ -131,7 +131,7 @@ object DiagnosticsCollector {
         app?.firmwareVersion?.takeIf { it.isNotBlank() }?.let { put("firmware_version", it) }
         com.fersaiyan.cyanbridge.glasses.GlassesWifiChipInfo.hardwareVersion?.let { put("wifi_hardware_version", it) }
         com.fersaiyan.cyanbridge.glasses.GlassesWifiChipInfo.firmwareVersion?.let { put("wifi_firmware_version", it) }
-        // HeyCyan post-update command-gate state (add.242): cap byte, auth/bind outcome, last 03 NAK cmd.
+        // HeyCyan post-update command-gate state: cap byte, auth/bind outcome, last 03 NAK cmd.
         com.fersaiyan.cyanbridge.glasses.offlineauth.HeyCyanGateState.diagnostics().forEach { (k, v) -> put(k, v) }
         profile?.takeIf { it.selectedClass == com.fersaiyan.cyanbridge.shared.devices.DeviceClass.HEY_CYAN }?.let {
             com.fersaiyan.cyanbridge.glasses.HeyCyanClassicBond.isBonded(context, it.macAddress)

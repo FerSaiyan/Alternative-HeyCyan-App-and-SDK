@@ -9,7 +9,7 @@ import org.junit.Test
 
 /**
  * JVM unit + end-to-end tests for the HeyCyan native offline unlock. No AVD, no device, no server:
- * the state machine runs against [SimulatedHeyCyanGlasses], which models the add.75 firmware gate.
+ * the state machine runs against [SimulatedHeyCyanGlasses], which models the glasses' command gate.
  */
 class HeyCyanOfflineAuthTest {
 
@@ -32,7 +32,7 @@ class HeyCyanOfflineAuthTest {
     }
 
     @Test
-    fun defaultLinkKeyMatchesAdd75() {
+    fun defaultLinkKeyMatchesTheSdkDefault() {
         val expected = intArrayOf(
             0x06, 0x77, 0x5f, 0x87, 0x91, 0x8d, 0xd4, 0x23,
             0x00, 0x5d, 0xf1, 0xd8, 0xcf, 0x0c, 0x14, 0x2b,
@@ -61,7 +61,7 @@ class HeyCyanOfflineAuthTest {
         }
     }
 
-    // ---- add.78 wire framing (0xBC transport + CRC-16/MODBUS, RCSP) --------------------------
+    // ---- Wire framing (0xBC transport + CRC-16/MODBUS, RCSP) ---------------------------------
 
     @Test
     fun bcFrameRoundTripsAndCrcIsVerified() {

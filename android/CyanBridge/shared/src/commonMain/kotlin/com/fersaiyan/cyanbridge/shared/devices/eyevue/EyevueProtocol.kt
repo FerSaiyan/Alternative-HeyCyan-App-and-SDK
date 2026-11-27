@@ -18,7 +18,7 @@ data class EyevueVoiceAssistantStatus(
 )
 
 /**
- * Eyevue smart glasses BLE protocol, reverse-engineered from the vendor app.
+ * Eyevue smart glasses BLE protocol, as the vendor app uses it.
  *
  * Datagram format: `[SOF_HI, 0x55, len_hi, len_lo, commandId, payload..., crc]` where
  * len = payload.size + 2 (command plus CRC, big-endian) and crc = (commandId + sum(payload)) & 0xFF.

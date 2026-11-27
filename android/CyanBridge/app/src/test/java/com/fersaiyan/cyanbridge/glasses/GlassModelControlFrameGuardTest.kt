@@ -8,7 +8,7 @@ import org.junit.Test
 /**
  * Guards the vendor cmd-65 (GlassModelControl) BLE notify parse against short/truncated frames.
  *
- * The 8-byte frame below is the field-crash vector pinned by add.217: routed through the real
+ * The 8-byte frame below is the field-crash frame: routed through the real
  * dispatch (data[0]=0xBC magic, data[1]=65 command id) the vendor
  * GlassModelControlResponse.acceptData reads data[7] as dataType=6 and then
  * Arrays.copyOfRange(data, 9, 11) on an 8-byte array -> arraycopy length=-1 / AIOOBE.

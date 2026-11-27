@@ -40,7 +40,7 @@ class GlassesSimBridgeReceiver : BroadcastReceiver() {
                 active?.stop()
                 active = null
             }
-            // add.221 media-sync lifecycle harness commands (debug-only).
+            // Media-sync lifecycle harness commands (debug-only).
             "connect" -> {
                 val mac = intent.getStringExtra("mac") ?: GlassesSimBridge.DEFAULT_ADDRESS
                 GlassesSimHarness.markConnected(mac)

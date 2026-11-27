@@ -4,9 +4,7 @@ import kotlin.random.Random
 
 /**
  * JieLi RCSP, the EyeVue (BR28) firmware-update and target-info protocol on GATT service AE00
- * (AE01 write, AE02 notify). Ported from the owner's reverse-engineered reference
- * (firmware_dump add.175 `jl_rcsp_ota_add175.py`, checked there against the vendor app and its
- * native auth library).
+ * (AE01 write, AE02 notify). Ported from the owner's reference implementation.
  *
  * Frame: `FE DC BA | flags | opcode | u16 BE len | body | EF`. flags bit7 = command, bit6 = the
  * command expects a response. Command body = sn [, xmOpcode for opcode 0x01], payload; response

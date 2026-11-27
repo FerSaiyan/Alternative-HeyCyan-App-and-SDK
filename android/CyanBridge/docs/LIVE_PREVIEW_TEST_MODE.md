@@ -37,8 +37,8 @@ actual RTSP playback establish readiness.
   explain fallback endpoints; the official and hardware-tested 8554/ch0 URL
   takes priority over static-analysis candidates.
 
-The local official-app decompilation (`1.0.86_20260115`) contains `wifi/ap/TempWifiHelper.java`,
-but not the newer `RealTimePreviewActivity`. AP start `02 01 14 02` is recorded
+The official app `1.0.86_20260115` has a temporary-Wi-Fi helper for AP mode,
+but not the newer realtime preview screen. AP start `02 01 14 02` is recorded
 by Vortex; the realtime credential source and AP hardware behavior still need
 verification. CyanBridge currently starts HeyCyan live in Wi-Fi Direct mode.
 

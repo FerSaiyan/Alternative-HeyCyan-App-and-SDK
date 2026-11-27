@@ -13,7 +13,7 @@ import org.robolectric.RobolectricTestRunner
  *
  * The original BatteryRsp.acceptData read data[0] and data[1] with no length check, and the vendor's
  * QCDataParser calls it outside its try/catch, so a short battery reply was an uncaught
- * ArrayIndexOutOfBoundsException (the rsp-form crash class add.219 fixed for cmd-65).
+ * ArrayIndexOutOfBoundsException (the same rsp-form crash class as the one fixed for cmd-65).
  */
 @RunWith(RobolectricTestRunner::class)
 class VendorBatteryRspGuardTest {

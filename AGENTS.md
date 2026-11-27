@@ -7,21 +7,19 @@ Software Development Kit (SDK) for HeyCyan Smart Glasses. Contains core librarie
 - `android/`: Android-specific SDK code and demo apps.
 - `ios/`: iOS-specific SDK code and sample projects.
 - `examples/`: Cross-platform or specific usage examples.
-- `firmware_dump/`: Hardware firmware reference or dumps.
 - `QCSDK.framework/`: Pre-compiled framework for iOS development.
 
 ## Android Data Transfer Notes
 
-- Media transfer (BLE + Wi-Fi Direct HTTP) reverse-engineering notes live in `android/AGENTS.md`.
+- Media transfer (BLE + Wi-Fi Direct HTTP) notes live in `android/AGENTS.md`.
 
 ## UI rule
 - The whole app, every popup included, is Compose Material 3 Expressive in the app theme; no View-based dialogs
   (guarded by a unit test). Details: "UI rule" in `android/AGENTS.md`.
 
 ## Glasses emulators
-- App ⇄ simulated-glasses tests on Android emulators (HeyCyan, EyeVue, TuneBuds, Even Realities G2): see
-  "Glasses emulators for app testing" in `android/AGENTS.md`. The simulators themselves live only in the private
-  firmware repo (`firmware_dump/`, index `docs/EMULATORS_AND_SIMULATORS.md`); never copy them here.
+- App ⇄ simulated-glasses tests on Android emulators: see "Hardware simulators" in `android/AGENTS.md`. The
+  simulators themselves are maintained outside this repository; never copy them here.
 
 ## Development Environment
 - **Conda Environment:** `LocalGPT_llama2`

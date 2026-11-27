@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 
 /** AB Mate FOTA, the 0xB0 wake event and the 0xB2 glasses-mic path. */
 class TuneBudsCustomizationTest {
-    /** Glasses that answer 0xA0 and verify the streamed image like the add.176 device model. */
+    /** Glasses that answer 0xA0 and verify the streamed image like the real glasses. */
     private class FotaGlasses(private val block: Int, private val failWith: Int? = null) : TuneBudsTransport {
         lateinit var session: TuneBudsSession
         val image = mutableListOf<Byte>()

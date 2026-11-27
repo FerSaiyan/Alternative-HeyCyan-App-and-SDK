@@ -2,8 +2,7 @@
 
 ## Vendor reference and current flow
 
-`android/eyevue-jadx/sources/com/eyevue/glassapp/view/live/EyevueLiveActivity.java`
-uses LibVLC, a texture-backed `VLCVideoLayout`, and RTSP-over-TCP. It starts
+The vendor app's live screen uses LibVLC, a texture-backed `VLCVideoLayout`, and RTSP-over-TCP. It starts
 live mode over BLE (`0x67`), joins the reported Wi-Fi network, calls the HTTP
 live trigger, then plays `/xxx.mov`. The T-series uses `/h264` instead.
 

@@ -124,7 +124,7 @@ internal class GlassesMediaSyncCoordinator(
     private var downloadAnyPeerSeen = false
     /**
      * The glasses confirmed Wi-Fi Direct up at least once in this sync (transfer reply dataType 1 / errorCode 1,
-     * sent only after their Wi-Fi chip reports P2P success, firmware_dump add.236). Kept across command resends,
+     * sent only after their Wi-Fi chip reports P2P success). Kept across command resends,
      * which reset the per-attempt callback fields.
      */
     private var downloadGlassesConfirmedWifiDirect = false
@@ -697,7 +697,7 @@ internal class GlassesMediaSyncCoordinator(
                 }
             }
         }
-        // If the gated transfer command gets the firmware's 0x03 NAK (pre-auth/pre-bind gate, add.240),
+        // If the gated transfer command gets the firmware's 0x03 NAK (pre-auth/pre-bind gate),
         // the gate trigger runs the offline unlock and then invokes this one-shot retry of the command.
         com.fersaiyan.cyanbridge.glasses.offlineauth.HeyCyanGateTrigger.registerGatedRetry {
             LargeDataHandler.getInstance().glassesControl(byteArrayOf(0x02, 0x01, 0x04)) { _, _ -> }
@@ -798,7 +798,7 @@ internal class GlassesMediaSyncCoordinator(
     private suspend fun resetTransferP2pForRetry(sessionId: Long): Boolean {
         if (!isDownloadControlActive(sessionId)) return false
         if (downloadWifiP2pManager?.isJoinInFlight() == true) {
-            // [0x02,0x01,0x0F] makes the glasses drop the group we are joining (add.223).
+            // [0x02,0x01,0x0F] makes the glasses drop the group we are joining.
             Log.i("DataDownload", "Skipping pre-retry P2P reset: P2P join in flight")
             return false
         }
@@ -1187,8 +1187,8 @@ internal class GlassesMediaSyncCoordinator(
 
     /**
      * Plain explanation when this sync never saw the glasses' Wi-Fi Direct peer (no peer at all, no group, no
-     * BLE-reported IP). The glasses' transfer-mode reply `dataType 1 / errorCode 1` means their Wi-Fi Direct is up
-     * (firmware_dump add.236), which puts the problem on the phone side (log_mwqq8cyw). Null otherwise.
+     * BLE-reported IP). The glasses' transfer-mode reply `dataType 1 / errorCode 1` means their Wi-Fi Direct is up,
+     * which puts the problem on the phone side (log_mwqq8cyw). Null otherwise.
      */
     private fun glassesWifiStartHint(): String? {
         val wifiSeen = downloadAnyPeerSeen || downloadP2pConnected || !downloadBleIp.isNullOrBlank()
@@ -1202,7 +1202,7 @@ internal class GlassesMediaSyncCoordinator(
 
     /**
      * Plain explanation when the Wi-Fi Direct link came up in this sync but a VPN covers the app: its tunnel also
-     * carries the requests for the glasses' private address (log_mwra0io2 / log_mwr92qph, firmware_dump add.238).
+     * carries the requests for the glasses' private address (log_mwra0io2 / log_mwr92qph).
      */
     private fun vpnBlockHint(): String? = GlassesSyncVpnHint.message(
         p2pNetwork.vpnState(),
@@ -2959,7 +2959,7 @@ internal class GlassesMediaSyncCoordinator(
                 }
                 val p2p = WifiP2pManagerSingleton.getInstance(activity)
                 if (p2p.isJoinInFlight()) {
-                    // The reset would tear down the join that is about to deliver the group (add.223).
+                    // The reset would tear down the join that is about to deliver the group.
                     Log.i("DataDownload", "Skipping resetDeviceP2p on error=255 (source=$source): P2P join in flight")
                     return
                 }

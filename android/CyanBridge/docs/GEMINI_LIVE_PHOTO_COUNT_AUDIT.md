@@ -5,7 +5,7 @@ Date: 2026-10-04
 Implementation follow-up: [HeyCyan Live photo repair](HEYCYAN_LIVE_PHOTO_REPAIR.md).
 The investigation below describes the state before that local repair.
 
-Companion to [the issue #23 BLE photo audit](HEYCYAN_BLE_PHOTO_ISSUE_23_AUDIT.md).
+Companion to the issue #23 BLE photo audit (internal notes).
 
 ## Production evidence
 

@@ -34,7 +34,7 @@ enum class OfflineUnlockResult {
 }
 
 /**
- * Drives the HeyCyan native **offline** unlock, per the add.75 verdict + add.78 recipe:
+ * Drives the HeyCyan native **offline** unlock:
  *
  *   capability query (cmd-71)
  *     -> if device-auth required: RCSP symmetric challenge-response with the default link key

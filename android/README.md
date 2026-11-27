@@ -50,36 +50,20 @@ token: <auth-token>
 
 Request body includes `appId`, `uid`, `hardwareVersion`, `romVersion`, `os`, `mac`, `country`, `dev`.
 
-### Capturing OTA URLs with Frida
-
-The Frida scripts in `HeyCyanOfficialApp/frida/` can intercept the app's OTA flow:
-
-1. **`heycyan_ota_intercept.js`** — full intercept: captures token, API parameters, download URLs, blocks DFU
-2. **`heycyan_ota_api_trace.js`** — lightweight: logs API parameters only
-3. **`heycyan_official_ota_trace.js`** — BLE/DFU protocol tracer
-
-See `HeyCyanOfficialApp/FRIDA_OTA_INTERCEPT_GUIDE.md` for the full guide.
-
-### Known Working Token (Guest Account)
-
-```
-token: 15ef6eb5403406c1da0dc4a4defa2ea1
-```
-
-This is a guest/anonymous account. It may expire. Re-run the Frida script to capture a fresh one.
-
 ### Querying for firmware
+
+Pass your own account token; none is published here.
 
 ```bash
 # BT firmware (.bin) — returns encrypted container for JieLi processor
 python3 scripts/probe_last_ota.py \
-  --token '15ef6eb5403406c1da0dc4a4defa2ea1' \
+  --token '<auth-token>' \
   --hardware-version AM01G1_V9.2 \
   --rom-version AM01G1_9.20.00_2510111600
 
 # Wi-Fi firmware (.swu) — returns cpio archive for V821 processor
 python3 scripts/probe_last_ota.py \
-  --token '15ef6eb5403406c1da0dc4a4defa2ea1' \
+  --token '<auth-token>' \
   --hardware-version WIFIAM01G1_V9.2 \
   --rom-version WIFIAM01G1_9.2_1.00.00_2501010000
 ```

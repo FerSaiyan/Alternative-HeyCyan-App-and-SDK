@@ -52,7 +52,7 @@ class HeyCyanSymmetricAuth(
 
     /**
      * Optional alternate — XTEA over the two 64-bit halves of the 16-byte block, 32 rounds. The
-     * HeyCyan **server** path uses XTEA, but add.78 confirms the native RCSP handshake does NOT; kept
+     * HeyCyan **server** path uses XTEA, but the native RCSP handshake does NOT; kept
      * only as an experimentation option, never a default.
      */
     object XteaCipher : ChallengeCipher {

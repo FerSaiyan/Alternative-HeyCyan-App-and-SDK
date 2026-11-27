@@ -207,7 +207,7 @@ internal class DeviceConnectionCoordinator(
         }
         if (wifiChipLinkUp || !heyCyan) return
         wifiChipLinkUp = true
-        // HeyCyan post-update command gate (add.242): if the unit reports device-auth/bind required,
+        // HeyCyan post-update command gate: if the unit reports device-auth/bind required,
         // activate it with the device's own offline handshake + front-button bind so sync works without
         // the official app. A unit that advertises no requirement is left untouched (NOT_REQUIRED).
         com.fersaiyan.cyanbridge.glasses.offlineauth.HeyCyanGateTrigger.onHeyCyanConnected(

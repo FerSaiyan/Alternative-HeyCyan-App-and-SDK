@@ -62,7 +62,7 @@ enum class FamilyOtaBlocker {
     AUDIO_BUSY,
 }
 
-/** A firmware image the EyeVue vendor published, as the owner mirrored it (firmware_dump `Pure_Firmware_Dumps`). */
+/** A firmware image the EyeVue vendor published, as the owner mirrored it. */
 data class KnownFirmwareImage(val modelCode: String, val version: String, val size: Long, val sha256: String)
 
 object FamilyFirmwareRules {

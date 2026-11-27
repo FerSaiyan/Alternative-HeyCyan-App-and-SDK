@@ -9,8 +9,8 @@ import com.fersaiyan.cyanbridge.shared.devices.firmware.FirmwareChecksums.u32le
 data class FotInspection(val chip: String)
 
 /**
- * The TuneBuds (Bluetrum) `.fot` container checks the glasses' own `ota_pack_analyze` runs and the
- * owner's packer verifies (firmware_dump `tb_repack_add176.py verify_fot`, outer part):
+ * The TuneBuds (Bluetrum) `.fot` container checks the glasses run before an update and the
+ * owner's packer verifies (outer part):
  * `POT\0` magic, total length, the header CRC16 at 0xFE, the chip TLV (`QUEN`) and the
  * `ota_user_bin` TLV, the payload/trailer layout and their CRC32s. The compressed image inside
  * is checked by the glasses block by block during the update.

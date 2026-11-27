@@ -9,7 +9,7 @@ This investigation compares:
 - the 82 retained Android support reports from the CyanBridge website database;
 - the 55 reports categorized as `P2P/WiFi sync issue`;
 - CyanBridge `v2.1.1` and `v2.3.0`;
-- the decompiled official HeyCyan album-import and Wi-Fi Direct code.
+- the official HeyCyan app's album-import and Wi-Fi Direct behaviour.
 
 The support reports are user-submitted failure reports. They do not include successful sync attempts, so the counts below describe the composition of reported failures, not a failure rate. No contact details or report IDs are included here.
 

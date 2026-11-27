@@ -2,7 +2,7 @@
 
 Implemented locally on 2026-10-04. Background:
 [Live photo-count audit](GEMINI_LIVE_PHOTO_COUNT_AUDIT.md) and
-[issue #23 transfer audit](HEYCYAN_BLE_PHOTO_ISSUE_23_AUDIT.md).
+the issue #23 transfer audit (internal notes).
 
 ## Ownership and notification routing
 
