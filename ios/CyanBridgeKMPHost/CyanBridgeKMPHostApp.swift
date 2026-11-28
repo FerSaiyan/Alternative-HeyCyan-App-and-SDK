@@ -8,6 +8,12 @@ struct CyanBridgeKMPHostApp: App {
         SdkGlassesSetup.register()
         IosSecurityBridgeImpl.register()
         LocalModelBridgeImpl.register()
+        LiteRtModelBridgeImpl.register()
+        // CYANBRIDGE_LITERT_SELFTEST=1: download the catalog's LiteRT models and run each once; the report goes to
+        // Documents/litert-selftest.txt and cyanbridge-debug.log.
+        if ProcessInfo.processInfo.environment["CYANBRIDGE_LITERT_SELFTEST"] == "1" {
+            LiteRtModelBridgeImpl.runSelfTest { report in NSLog("LITERT_SELFTEST %@", report) }
+        }
         if let selfTest = ProcessInfo.processInfo.environment["CYANBRIDGE_LOCAL_MODEL_SELFTEST"], !selfTest.isEmpty {
             IosLocalModels.shared.runSelfTest(modelName: selfTest)
         }
