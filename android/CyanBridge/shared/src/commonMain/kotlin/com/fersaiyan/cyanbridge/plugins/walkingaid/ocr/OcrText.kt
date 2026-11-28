@@ -1,5 +1,7 @@
 package com.fersaiyan.cyanbridge.plugins.walkingaid.ocr
 
+import kotlin.math.roundToInt
+
 /**
  * Text side of the Walking Aid reader (bus signs, car plates): CTC decoding, Brazilian plate format rules and the
  * "is this the one I'm waiting for?" matching. Ported from the OCR bench (/mnt/seagate/ML/ocr-bench, scripts/ocrlib.py
@@ -136,7 +138,7 @@ object OcrText {
         if (t.all { it.isDigit() } || t.length <= 4) {
             return Regex("[A-Z0-9]+").findAll(read.uppercase()).any { normalize(it.value) == t }
         }
-        return substringDistance(t, r) <= maxOf(1, Math.round(0.15f * t.length))
+        return substringDistance(t, r) <= maxOf(1, (0.15f * t.length).roundToInt())
     }
 
     /** Majority read over the last frames: returns the read seen at least [minVotes] times, if any. */

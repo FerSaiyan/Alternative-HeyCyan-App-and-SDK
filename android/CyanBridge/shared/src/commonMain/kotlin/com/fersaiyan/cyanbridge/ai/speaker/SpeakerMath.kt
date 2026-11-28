@@ -4,7 +4,7 @@ import com.fersaiyan.cyanbridge.shared.audio.PcmEnergy
 import kotlin.math.abs
 import kotlin.math.sqrt
 
-/** Windowing, templates and scoring shared by enrollment and verification. JVM-testable. */
+/** Windowing, templates and scoring shared by enrollment and verification. Common code (Android and iOS). */
 object SpeakerMath {
     const val SAMPLE_RATE = 16_000
     const val FRAME_SAMPLES = 320
