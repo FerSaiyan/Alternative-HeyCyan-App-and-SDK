@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import Foundation
+import CLiteRTLM
 
 /// The backend to use for the LiteRT-LM engine.
 ///
@@ -39,6 +40,25 @@ public enum Backend: Equatable, Hashable, Sendable {
   }
 }
 
+/// Activation data type for inference.
+///
+/// Note: Support depends on the specific model architecture and target backend. Most models
+/// support `.float16` and `.float32` (when not overriding, GPU backends typically default to
+/// `.float16` to optimize throughput, while CPU backends typically default to `.float32`).
+/// Setting an activation data type not supported by the model or backend (e.g., `.int8` on a
+/// standard float model) will cause `Engine.initialize()` to fail with an error (e.g. tensor
+/// type mismatch or unsupported sampler).
+public enum ActivationDataType: Int32, Equatable, Hashable, Sendable {
+  /// 32-bit floating point activation data type.
+  case float32 = 0
+  /// 16-bit floating point activation data type.
+  case float16 = 1
+  /// 16-bit integer activation data type.
+  case int16 = 2
+  /// 8-bit integer activation data type.
+  case int8 = 3
+}
+
 /// Configuration for the LiteRT-LM engine.
 public struct EngineConfig: Hashable, Sendable {
   /// The file path to the LiteRT-LM model.
@@ -61,6 +81,18 @@ public struct EngineConfig: Hashable, Sendable {
   public let loraRank: Int?
   /// The rank of the audio LoRA weights. If 0 or nil, audio LoRA is disabled.
   public let audioLoraRank: Int?
+  /// Optional activation data type override for inference (e.g., `.float32`, `.float16`).
+  /// When `nil`, use the default value from the model or the engine (typically `.float16` for
+  /// GPU backends to optimize throughput and memory bandwidth, and `.float32` for CPU backends).
+  /// Note: If the specified activation data type is not supported by the model or backend,
+  /// `Engine.initialize()` will fail with an error at initialization time.
+  public let activationDataType: ActivationDataType?
+  /// The default speculative decoding (e.g. MTP) configuration of the engine's conversations; each
+  /// conversation can override any field with `ConversationConfig.speculativeDecodingConfig`.
+  /// Fields left `nil` use the runtime defaults (mode `.off`). `.on` and `.adaptive` load the
+  /// drafter when the engine is initialized. If set, its mode takes precedence over the deprecated
+  /// `ExperimentalFlags.enableSpeculativeDecoding`.
+  public let speculativeDecodingConfig: SpeculativeDecodingConfig?
 
   /// - Parameters:
   ///   - modelPath: The file path to the LiteRT-LM model.
@@ -76,6 +108,12 @@ public struct EngineConfig: Hashable, Sendable {
   ///     application has write access. If `nil`, it uses the directory of the `modelPath`.
   ///   - loraRank: The rank of the text LoRA weights.
   ///   - audioLoraRank: The rank of the audio LoRA weights.
+  ///   - activationDataType: Optional activation data type override for inference. When `nil`,
+  ///     defaults to the model/engine default (typically `.float16` for GPU and `.float32` for
+  ///     CPU). Note: If the specified type is not supported by the model or backend,
+  ///     `Engine.initialize()` will fail.
+  ///   - speculativeDecodingConfig: The default speculative decoding configuration of the
+  ///     engine's conversations. If `nil`, uses the runtime defaults (mode `.off`).
   /// - Throws: `LiteRTLMError` if `maxNumTokens` is less than or equal to 0.
   public init(
     modelPath: String, backend: Backend = .cpu(), visionBackend: Backend? = nil,
@@ -83,7 +121,9 @@ public struct EngineConfig: Hashable, Sendable {
     maxNumTokens: Int? = nil,
     cacheDir: String? = nil,
     loraRank: Int? = nil,
-    audioLoraRank: Int? = nil
+    audioLoraRank: Int? = nil,
+    activationDataType: ActivationDataType? = nil,
+    speculativeDecodingConfig: SpeculativeDecodingConfig? = nil
   ) throws {
     if let maxNumTokens, maxNumTokens <= 0 {
       throw LiteRTLMError.config(.invalidMaxNumTokens)
@@ -96,6 +136,8 @@ public struct EngineConfig: Hashable, Sendable {
     self.cacheDir = cacheDir
     self.loraRank = loraRank
     self.audioLoraRank = audioLoraRank
+    self.activationDataType = activationDataType
+    self.speculativeDecodingConfig = speculativeDecodingConfig
   }
 }
 
@@ -161,6 +203,63 @@ public struct ThinkingConfig: Equatable {
   }
 }
 
+/// How speculative decoding (e.g. MTP) is used during decode.
+///
+/// The modes match the values of the `--speculative_decoding` flag of the LiteRT-LM CLI (`off`,
+/// `on` and `adaptive`).
+public enum SpeculativeDecodingMode: Int32, Equatable, Hashable, Sendable {
+  /// Never speculate.
+  case off = 0
+  /// Speculate on every decode step.
+  case on = 1
+  /// Speculate only while it is measured to be faster than plain decoding. Backends that do not
+  /// support adaptive speculation speculate on every decode step, like `.on`.
+  case adaptive = 2
+
+  /// The corresponding C API value.
+  var cValue: LiteRtLmSpeculativeDecodingMode {
+    switch self {
+    case .off: return kLiteRtLmSpeculativeDecodingModeOff
+    case .on: return kLiteRtLmSpeculativeDecodingModeOn
+    case .adaptive: return kLiteRtLmSpeculativeDecodingModeAdaptive
+    }
+  }
+}
+
+/// Speculative decoding (e.g. MTP) configuration.
+///
+/// Set on `EngineConfig` as the default of the engine's conversations, and on
+/// `ConversationConfig` as an override. Fields left `nil` inherit the engine's values (on the
+/// engine: the runtime defaults).
+public struct SpeculativeDecodingConfig: Equatable, Hashable, Sendable {
+  /// How speculative decoding is used. The runtime default is `.off`.
+  public var mode: SpeculativeDecodingMode?
+
+  /// The lenience factor c in [0, 1] of the speculative decoding acceptance test.
+  ///
+  /// - Warning: Any c > 0 gives up the quality guarantee of speculative decoding. With c = 0 (the
+  ///   runtime default), speculative decoding is lossless: emitted tokens follow the sampling
+  ///   distribution p, the same as without speculative decoding. With c > 0, a drafted token that
+  ///   differs from the verifier's sample is still accepted with probability c, so emitted tokens
+  ///   follow (1 - c) * p + c * delta(draft) and can differ from what the model itself would
+  ///   produce. Only set c > 0 if lower output quality is an acceptable price for speed; c = 1
+  ///   accepts every drafted token.
+  ///
+  /// The NPU backend does not support lenience and stays exact. Values outside [0, 1] are rejected
+  /// when the config is applied (engine initialization or conversation creation).
+  public var lenience: Float?
+
+  /// - Parameters:
+  ///   - mode: How speculative decoding is used. If `nil`, inherits the engine's mode (on the
+  ///     engine: `.off`).
+  ///   - lenience: The lenience factor in [0, 1]. If `nil`, inherits the engine's lenience (on
+  ///     the engine: 0).
+  public init(mode: SpeculativeDecodingMode? = nil, lenience: Float? = nil) {
+    self.mode = mode
+    self.lenience = lenience
+  }
+}
+
 /// Configuration fo the LiteRT-LM `Conversation`.
 public struct ConversationConfig {
   // The system message to be used in the conversation.
@@ -186,6 +285,21 @@ public struct ConversationConfig {
   public let automaticToolCalling: Bool
   public let enableResponseFormat: Bool
   public let visualTokenBudget: Int32?
+  /// The speculative decoding configuration for this conversation, which overrides
+  /// `EngineConfig.speculativeDecodingConfig`. Fields left `nil` inherit the engine's values.
+  public let speculativeDecodingConfig: SpeculativeDecodingConfig?
+
+  /// Whether speculative decoding was requested through the deprecated
+  /// `init(..., enableSpeculativeDecoding:, ...)`. The request is already reflected in
+  /// `speculativeDecodingConfig`.
+  @available(*, deprecated, message: "Use speculativeDecodingConfig instead.")
+  public var enableSpeculativeDecoding: Bool? { legacyEnableSpeculativeDecoding }
+  private var legacyEnableSpeculativeDecoding: Bool? = nil
+
+  /// An optional Jinja chat template string to override the default template defined in the model
+  /// metadata for this conversation. If nil, the conversation uses the template defined in the
+  /// model metadata.
+  public let chatTemplate: String?
 
   /// - Parameters:
   ///   - systemMessage: The system message to be used in the conversation.
@@ -200,6 +314,13 @@ public struct ConversationConfig {
   ///   - automaticToolCalling: Whether to enable automatic tool calling. Default is true.
   ///   - enableResponseFormat: Whether to enable response format (constrained decoding). Default
   ///     is false.
+  ///   - visualTokenBudget: Visual token budget.
+  ///   - speculativeDecodingConfig: The speculative decoding configuration for this
+  ///     conversation. Fields left `nil` (or a `nil` config, the default) inherit the engine's
+  ///     configuration.
+  ///   - chatTemplate: An optional Jinja chat template string to override the default template defined
+  ///     in the model metadata for this conversation. If nil, the conversation uses the template
+  ///     defined in the model metadata.
   public init(
     systemMessage: Message? = nil,
     initialMessages: [Message] = [],
@@ -211,7 +332,9 @@ public struct ConversationConfig {
     thinkingConfig: ThinkingConfig? = nil,
     automaticToolCalling: Bool = true,
     enableResponseFormat: Bool = false,
-    visualTokenBudget: Int32? = nil
+    visualTokenBudget: Int32? = nil,
+    speculativeDecodingConfig: SpeculativeDecodingConfig? = nil,
+    chatTemplate: String? = nil
   ) {
     self.systemMessage = systemMessage.flatMap { msg in
       if msg.toString.isEmpty {
@@ -230,6 +353,58 @@ public struct ConversationConfig {
     self.automaticToolCalling = automaticToolCalling
     self.enableResponseFormat = enableResponseFormat
     self.visualTokenBudget = visualTokenBudget
+    self.speculativeDecodingConfig = speculativeDecodingConfig
+    self.chatTemplate = chatTemplate
+  }
+
+  /// Deprecated: use `init(..., speculativeDecodingConfig:, ...)` instead.
+  ///
+  /// `enableSpeculativeDecoding` maps to the mode of `speculativeDecodingConfig`: `true` is `.on`
+  /// and `false` is `.off`. If `speculativeDecodingConfig` also sets a mode, that mode takes
+  /// precedence. If neither is set, the conversation inherits the engine's mode.
+  @available(
+    *, deprecated,
+    message: "Use init(..., speculativeDecodingConfig:, ...) with mode .on or .off instead."
+  )
+  public init(
+    systemMessage: Message? = nil,
+    initialMessages: [Message] = [],
+    tools: [Tool] = [],
+    samplerConfig: SamplerConfig? = nil,
+    loraPath: String? = nil,
+    audioLoraPath: String? = nil,
+    enableToolCallStreaming: Bool = false,
+    thinkingConfig: ThinkingConfig? = nil,
+    automaticToolCalling: Bool = true,
+    enableResponseFormat: Bool = false,
+    visualTokenBudget: Int32? = nil,
+    enableSpeculativeDecoding: Bool?,
+    speculativeDecodingConfig: SpeculativeDecodingConfig? = nil,
+    chatTemplate: String? = nil
+  ) {
+    var resolvedSpeculativeDecodingConfig = speculativeDecodingConfig
+    if resolvedSpeculativeDecodingConfig?.mode == nil,
+      let enableSpeculativeDecoding = enableSpeculativeDecoding
+    {
+      var config = resolvedSpeculativeDecodingConfig ?? SpeculativeDecodingConfig()
+      config.mode = enableSpeculativeDecoding ? .on : .off
+      resolvedSpeculativeDecodingConfig = config
+    }
+    self.init(
+      systemMessage: systemMessage,
+      initialMessages: initialMessages,
+      tools: tools,
+      samplerConfig: samplerConfig,
+      loraPath: loraPath,
+      audioLoraPath: audioLoraPath,
+      enableToolCallStreaming: enableToolCallStreaming,
+      thinkingConfig: thinkingConfig,
+      automaticToolCalling: automaticToolCalling,
+      enableResponseFormat: enableResponseFormat,
+      visualTokenBudget: visualTokenBudget,
+      speculativeDecodingConfig: resolvedSpeculativeDecodingConfig,
+      chatTemplate: chatTemplate)
+    self.legacyEnableSpeculativeDecoding = enableSpeculativeDecoding
   }
 }
 

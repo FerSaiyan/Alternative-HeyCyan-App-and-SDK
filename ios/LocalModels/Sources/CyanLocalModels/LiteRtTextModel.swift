@@ -22,9 +22,10 @@ final class LiteRtTextModel: LocalTextModel, @unchecked Sendable {
     /// memory the model is reloaded text-only.
     static func load(path: String, useGpu: Bool, contextTokens: Int) async throws -> LiteRtTextModel {
         let backend: Backend = useGpu ? .gpu : .cpu()
-        let capabilities = Capabilities(modelPath: path)
-        let hasVision = capabilities?.inputModalities.vision ?? false
-        let budget = capabilities.map { Int32($0.maxVisionTokenBudget()) }.flatMap { $0 > 0 ? $0 : nil }
+        // LiteRT-LM 0.20 replaced `Capabilities` with `ModelInfo` (same failable init and accessors).
+        let modelInfo = ModelInfo(modelPath: path)
+        let hasVision = modelInfo?.inputModalities.vision ?? false
+        let budget = modelInfo.map { Int32($0.maxVisionTokenBudget()) }.flatMap { $0 > 0 ? $0 : nil }
         // The image encoder runs on the CPU: with a GPU vision executor on iOS, LiteRT-LM fails
         // to create conversations. Photos are occasional, so the CPU cost is acceptable.
         if hasVision, let engine = try? await makeEngine(path, backend, vision: .cpu(), contextTokens),
